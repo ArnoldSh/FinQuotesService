@@ -3,7 +3,6 @@ package worker
 import (
 	"FinQuotesService/internal/model"
 	"FinQuotesService/internal/service"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,27 +22,23 @@ type ratesResponse struct {
 	Rates map[string]float64 `json:"rates"`
 }
 
-func StartWorker(ctx context.Context, jobs <-chan QuoteJob, srv *service.QuoteService) {
-	for {
-		select {
-		case <-ctx.Done():
-			log.Println("[Worker] Worker stopped by context")
-			// To-do: handle all possible pending quote requests Or cancel them
-			return
-		case job := <-jobs:
-			log.Println("[Worker] Job processing started, job_id = " + job.Id)
-			price, err := fetchExternalQuote(job.Currency)
-			log.Println("[Worker] Job processing finished, job_id = " + job.Id)
-			status := model.StatusDone
-			if err != nil {
-				status = model.StatusError
-				log.Printf("[Worker] failed to fetch quote for %s: %v", job.Currency, err)
-			}
-			if err := srv.UpdateQuote(job.Id, price, status); err != nil {
-				log.Printf("[Worker] db update error: %v", err)
-			}
+func StartWorker(jobs <-chan QuoteJob, srv *service.QuoteService) {
+	for job := range jobs {
+		log.Println("[Worker] Job processing started, job_id = " + job.Id)
+		price, err := fetchExternalQuote(job.Currency)
+		log.Println("[Worker] Job processing finished, job_id = " + job.Id)
+
+		status := model.StatusDone
+		if err != nil {
+			status = model.StatusError
+			log.Printf("[Worker] failed to fetch quote for %s: %v", job.Currency, err)
+		}
+
+		if err := srv.UpdateQuote(job.Id, price, status); err != nil {
+			log.Printf("[Worker] db update error: %v", err)
 		}
 	}
+	log.Println("[Worker] Job channel closed, worker exiting")
 }
 
 func fetchExternalQuote(currencyPair string) (float64, error) {
