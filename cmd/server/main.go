@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -47,8 +48,13 @@ func runServer() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	var wg sync.WaitGroup
 	for i := 0; i < workersCount; i++ {
-		go worker.StartWorker(ctx, jobChan, srv)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			worker.StartWorker(jobChan, srv)
+		}()
 	}
 
 	mux := setupRoutes(h)
@@ -65,7 +71,7 @@ func runServer() error {
 	}()
 
 	<-ctx.Done()
-	log.Println("Shutting down gracefully...")
+	log.Println("Shutdown signal received, stopping server...")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -74,7 +80,9 @@ func runServer() error {
 	}
 
 	close(jobChan)
-	log.Println("Server stopped")
+	wg.Wait()
+
+	log.Println("All workers done. Server stopped.")
 	return nil
 }
 
