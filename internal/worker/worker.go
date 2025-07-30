@@ -22,6 +22,10 @@ type ratesResponse struct {
 	Rates map[string]float64 `json:"rates"`
 }
 
+var client = &http.Client{
+	Timeout: 5 * time.Second,
+}
+
 func StartWorker(jobs <-chan QuoteJob, srv *service.QuoteService) {
 	for job := range jobs {
 		log.Println("[Worker] Job processing started, job_id = " + job.Id)
@@ -51,7 +55,6 @@ func fetchExternalQuote(currencyPair string) (float64, error) {
 	base, target := split[0], split[1]
 	url := fmt.Sprintf("https://api.vatcomply.com/rates?base=%s", base)
 
-	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
 		return 0, err
